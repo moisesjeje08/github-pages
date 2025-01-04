@@ -1,0 +1,19 @@
+import os
+import shutil
+
+# Directorio de origen y destino
+source = "ruta/a/carpeta_origen"
+destination = "ruta/a/carpeta_destino"
+
+# Crear el destino si no existe
+if not os.path.exists(destination):
+    os.makedirs(destination)
+
+# Mover archivos según su extensión
+for file_name in os.listdir(source):
+    if file_name.endswith(".txt"):  # Filtrar archivos .txt
+        full_source = os.path.join(source, file_name)
+        full_destination = os.path.join(destination, file_name)
+        shutil.move(full_source, full_destination)
+
+print("¡Archivos movidos correctamente!")
