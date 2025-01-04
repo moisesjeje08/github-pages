@@ -1,0 +1,86 @@
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+import hashlib
+
+app = Flask(__BancoHumano__)
+
+# Configuración de la base de datos
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///banco.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+# Modelo para los usuarios
+class Usuario(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(80), nullable=False)
+    correo = db.Column(db.String(120), unique=True, nullable=False)
+    contrasena = db.Column(db.String(120), nullable=False)
+
+# Modelo para las cuentas
+class Cuenta(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    tipo_cuenta = db.Column(db.String(20), nullable=False)  # Ej: "ahorros", "corriente"
+    saldo = db.Column(db.Float, nullable=False, default=0.0)
+
+# Modelo para las transacciones
+class Transaccion(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    cuenta_origen = db.Column(db.Integer, nullable=False)
+    cuenta_destino = db.Column(db.Integer, nullable=True)  # Puede ser None para depósitos/retiros
+    monto = db.Column(db.Float, nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # Ej: "deposito", "retiro", "transferencia"
+    fecha = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+# Ruta para crear un usuario
+@app.route('/usuarios', methods=['POST'])
+def crear_usuario():
+    datos = request.get_json()
+    nombre = datos.get('nombre')
+    correo = datos.get('correo')
+    contrasena = datos.get('contrasena')
+
+    if not nombre or not correo or not contrasena:
+        return jsonify({'error': 'Faltan datos obligatorios'}), 400
+
+    contrasena_hash = hashlib.sha256(contrasena.encode()).hexdigest()
+
+    nuevo_usuario = Usuario(nombre=nombre, correo=correo, contrasena=contrasena_hash)
+    try:
+        db.session.add(nuevo_usuario)
+        db.session.commit()
+        return jsonify({'mensaje': 'Usuario creado con éxito'}), 201
+    except Exception as e:
+        return jsonify({'error': 'Error al crear el usuario', 'detalles': str(e)}), 500
+
+# Ruta para crear una cuenta
+@app.route('/cuentas', methods=['POST'])
+def crear_cuenta():
+    datos = request.get_json()
+    usuario_id = datos.get('usuario_id')
+    tipo_cuenta = datos.get('tipo_cuenta')
+
+    if not usuario_id or not tipo_cuenta:
+        return jsonify({'error': 'Faltan datos obligatorios'}), 400
+
+    nueva_cuenta = Cuenta(usuario_id=usuario_id, tipo_cuenta=tipo_cuenta, saldo=0.0)
+    try:
+        db.session.add(nueva_cuenta)
+        db.session.commit()
+        return jsonify({'mensaje': 'Cuenta creada con éxito'}), 201
+    except Exception as e:
+        return jsonify({'error': 'Error al crear la cuenta', 'detalles': str(e)}), 500
+
+# Ruta para consultar el saldo
+@app.route('/cuentas/<int:cuenta_id>/saldo', methods=['GET'])
+def consultar_saldo(cuenta_id):
+    cuenta = Cuenta.query.get(cuenta_id)
+    if not cuenta:
+        return jsonify({'error': 'Cuenta no encontrada'}), 404
+
+    return jsonify({'saldo': cuenta.saldo}), 200
+
+if __name__ == '__main__':
+    db.create_all()  # Crear las tablas si no existen
+    app.run(debug=True)
